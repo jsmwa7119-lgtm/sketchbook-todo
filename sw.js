@@ -1,5 +1,5 @@
-// 오프라인에서도 열리도록 앱 파일을 캐시한다. 데이터는 localStorage에 있으므로 여기서 다루지 않는다.
-const CACHE = 'sketch-todo-v1';
+﻿// 오프라인에서도 열리도록 앱 파일을 캐시한다. 데이터는 localStorage에 있으므로 여기서 다루지 않는다.
+const CACHE = 'sketch-todo-v2';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
