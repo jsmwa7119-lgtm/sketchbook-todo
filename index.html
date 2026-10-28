@@ -120,8 +120,8 @@
   .card .ph { font-size: 13px; color: var(--soft); margin-top: 6px; }
   .c1 { background: var(--p1); } .c2 { background: var(--p2); } .c3 { background: var(--p3); }
   .c4 { background: var(--p4); } .c5 { background: var(--p5); } .c6 { background: var(--p6); }
-  .tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
-  .wall { font: inherit; font-weight: 700; font-size: 12px; text-align: center; border: 0; border-radius: 999px; padding: 11px 2px; background: #fff; color: var(--ink); box-shadow: 0 2px 8px rgba(0,0,0,.15); cursor: pointer; }
+  .tools { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 8px; }
+  .wall { font: inherit; font-weight: 700; font-size: 13px; text-align: center; border: 0; border-radius: 999px; padding: 11px 2px; background: #fff; color: var(--ink); box-shadow: 0 2px 8px rgba(0,0,0,.15); cursor: pointer; }
   .stat { text-align: center; font-size: 13px; color: var(--soft); padding: 4px 0 8px; }
   .stat b { color: var(--red); }
 
@@ -245,11 +245,13 @@ function buildCover(el) {
     <div class="stat">${board === 'todo' ? `완료 <b>${done}</b> / ${tot}` : `이번 달 일기 <b>${written}</b> / ${days()}일`}</div>
     <div class="scroll"><div class="board">${cards}</div></div>
     <div class="tools">
-      <button class="wall" data-t="wall">🖼 배경화면</button>
+      <button class="wall" data-t="wall">🖼 오늘 배경화면</button>
+      <button class="wall" data-t="cwall">📅 달력 배경화면</button>
       <button class="wall" data-t="exp">⬆ 백업 저장</button>
       <label class="wall">⬇ 백업 불러오기<input type="file" accept="application/json,.json" hidden data-t="imp"></label>
     </div>`;
   el.querySelector('[data-t=wall]').onclick = makeWallpaper;
+  el.querySelector('[data-t=cwall]').onclick = makeCalendarWallpaper;
   el.querySelector('[data-t=exp]').onclick = exportData;
   el.querySelector('[data-t=imp]').onchange = e => importData(e.target.files[0]);
   el.querySelectorAll('[data-go]').forEach(c => c.onclick = () => go(+c.dataset.go));
@@ -289,27 +291,39 @@ function importData(file) {
   r.readAsText(file);
 }
 
-/* ---------- 배경화면 이미지 (오늘의 일정·할 일) ---------- */
+/* ---------- 배경화면 이미지 ---------- */
+// 폰 화면 비율의 캔버스와 그리기 도구. u = 가로 390 기준 1단위의 픽셀 수
+function wpCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  let W = Math.round(screen.width * dpr), H = Math.round(screen.height * dpr);
+  if (!W || !H || W > H) { W = 1080; H = 2340; }
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const bg = g.createLinearGradient(0, 0, W * .3, H);
+  bg.addColorStop(0, '#fffbe0'); bg.addColorStop(1, '#fff1a6');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+  const fit = (s, maxW) => { if (g.measureText(s).width <= maxW) return s; while (s.length > 1 && g.measureText(s + '…').width > maxW) s = s.slice(0, -1); return s + '…'; };
+  return { c, g, W, H, u: W / 390, font: '"Gowun Dodum","Malgun Gothic","Apple SD Gothic Neo",sans-serif', rr, fit };
+}
+
+function wpSave(c, name) {
+  c.toBlob(b => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }, 'image/png');
+}
+
+/* 오늘의 일정·할 일 */
 function makeWallpaper() {
   const pad = n => String(n).padStart(2, '0');
   const ym = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`, d = now.getDate();
   const todos = (rd(`sketch-todo-${ym}`)[d] || []);
   const evs = (rd(`sketch-event-${ym}`)[d] || []).slice().sort((a, b) => (a.time || '99') < (b.time || '99') ? -1 : 1);
 
-  const dpr = window.devicePixelRatio || 1;
-  let W = Math.round(screen.width * dpr), H = Math.round(screen.height * dpr);
-  if (!W || !H || W > H) { W = 1080; H = 2340; }
-  const u = W / 390;
-  const c = document.createElement('canvas'); c.width = W; c.height = H;
-  const g = c.getContext('2d');
-  const font = '"Gowun Dodum","Malgun Gothic","Apple SD Gothic Neo",sans-serif';
-
-  const bg = g.createLinearGradient(0, 0, W * .3, H);
-  bg.addColorStop(0, '#fffbe0'); bg.addColorStop(1, '#fff1a6');
-  g.fillStyle = bg; g.fillRect(0, 0, W, H);
-
-  const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
-  const fit = (s, maxW) => { if (g.measureText(s).width <= maxW) return s; while (s.length > 1 && g.measureText(s + '…').width > maxW) s = s.slice(0, -1); return s + '…'; };
+  const { c, g, W, H, u, font, rr, fit } = wpCanvas();
 
   const maxRows = 9;
   const rows = [
@@ -354,12 +368,57 @@ function makeWallpaper() {
   }
   if (more > 0) { g.fillStyle = '#8d7b3a'; g.fillText(`+${more}개 더`, x0 + 22 * u, y + rowH / 2 + 6 * u); }
 
-  c.toBlob(b => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(b); a.download = `배경화면-${ym}-${pad(d)}.png`;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-  }, 'image/png');
+  wpSave(c, `배경화면-${ym}-${pad(d)}.png`);
+}
+
+/* 이번 달 달력 + 다가오는 일정 */
+function makeCalendarWallpaper() {
+  const pad = n => String(n).padStart(2, '0');
+  const y = now.getFullYear(), m = now.getMonth(), ym = `${y}-${pad(m + 1)}`;
+  const E = rd(`sketch-event-${ym}`);
+  const { c, g, H, W, u, font, rr, fit } = wpCanvas();
+  const nd = new Date(y, m + 1, 0).getDate(), first = new Date(y, m, 1).getDay(), rowsN = Math.ceil((first + nd) / 7);
+  const byTime = (a, b) => (a.time || '99') < (b.time || '99') ? -1 : 1;
+  const up = [];
+  for (let d = now.getDate(); d <= nd; d++) (E[d] || []).slice().sort(byTime).forEach(e => up.push({ d, e }));
+  const list = up.slice(0, 4);
+
+  const cw = W - 32 * u, x0 = 16 * u, padX = 14 * u, cellW = (cw - 2 * padX) / 7, cellH = 50 * u;
+  const gridH = rowsN * cellH, evH = list.length ? 16 * u + list.length * 30 * u : 0;
+  const cardH = 120 * u + gridH + evH + 18 * u;
+  const y0 = Math.min(H * 0.28, H - cardH - 40 * u), gridTop = y0 + 120 * u;
+
+  g.save(); g.shadowColor = 'rgba(150,110,0,.25)'; g.shadowBlur = 24 * u; g.shadowOffsetY = 8 * u;
+  g.fillStyle = 'rgba(255,255,255,.88)'; rr(x0, y0, cw, cardH, 28 * u); g.fill(); g.restore();
+
+  g.textAlign = 'left'; g.fillStyle = '#33290a'; g.font = `700 ${34 * u}px ${font}`;
+  g.fillText(`${m + 1}월`, x0 + 22 * u, y0 + 56 * u);
+  g.textAlign = 'right'; g.fillStyle = '#8d7b3a'; g.font = `${16 * u}px ${font}`;
+  g.fillText(`${y}`, x0 + cw - 22 * u, y0 + 56 * u);
+
+  g.textAlign = 'center'; g.font = `${13 * u}px ${font}`;
+  WD.forEach((w, k) => { g.fillStyle = k === 0 ? '#e60023' : '#8d7b3a'; g.fillText(w, x0 + padX + cellW * (k + .5), y0 + 108 * u); });
+
+  for (let d = 1; d <= nd; d++) {
+    const pos = first + d - 1, col = pos % 7, top = gridTop + Math.floor(pos / 7) * cellH;
+    const cx = x0 + padX + cellW * (col + .5), isT = d === now.getDate();
+    if (isT) { g.fillStyle = '#e60023'; g.beginPath(); g.arc(cx, top + 14 * u, 14 * u, 0, Math.PI * 2); g.fill(); }
+    g.font = `700 ${16 * u}px ${font}`;
+    g.fillStyle = isT ? '#fff' : d < now.getDate() ? '#b9ad7c' : col === 0 ? '#e60023' : '#33290a';
+    g.fillText(d, cx, top + 20 * u);
+    const ev = E[d] || [];
+    ev.slice(0, 3).forEach((e, k, a) => { g.fillStyle = e.color; g.beginPath(); g.arc(cx + (k - (a.length - 1) / 2) * 9 * u, top + 36 * u, 3.2 * u, 0, Math.PI * 2); g.fill(); });
+  }
+
+  g.textAlign = 'left'; g.font = `${16 * u}px ${font}`;
+  let ly = gridTop + gridH + 16 * u;
+  for (const { d, e } of list) {
+    const cy = ly + 15 * u;
+    g.fillStyle = e.color; rr(x0 + 22 * u, cy - 10 * u, 5 * u, 20 * u, 3 * u); g.fill();
+    g.fillStyle = '#33290a'; g.fillText(fit(`${d}일  ${e.time ? e.time + '  ' : ''}${e.text}`, cw - 70 * u), x0 + 38 * u, cy + 5 * u);
+    ly += 30 * u;
+  }
+  wpSave(c, `달력배경-${ym}.png`);
 }
 
 /* ---------- 캘린더 ---------- */
