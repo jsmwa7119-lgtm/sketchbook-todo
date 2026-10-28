@@ -98,6 +98,19 @@
   .covhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
   .covhead h1 { margin: 0; font-size: 24px; }
   .round { width: 36px; height: 36px; border-radius: 50%; border: 0; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.15); font-size: 18px; cursor: pointer; color: var(--ink); }
+  h1.pick { cursor: pointer; padding: 4px 10px; border-radius: 999px; transition: background .15s; }
+  h1.pick:hover, h1.pick:active { background: rgba(0,0,0,.07); }
+  .picker { position: fixed; inset: 0; z-index: 100; background: rgba(60, 45, 0, .45); display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .picker .box { width: 100%; max-width: 340px; background: #fffdf3; border-radius: 24px; padding: 18px; box-shadow: 0 20px 50px rgba(0,0,0,.35); }
+  .picker .yr { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .picker .yr select { flex: 1; font: inherit; font-size: 20px; font-weight: 700; text-align: center; padding: 8px; border: 2px solid #f0e3a4; border-radius: 14px; background: #fff; color: var(--ink); }
+  .picker .yr button { width: 42px; height: 42px; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.15); font-size: 20px; cursor: pointer; color: var(--ink); }
+  .picker .mg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .picker .mg button { font: inherit; font-size: 16px; font-weight: 700; padding: 13px 0; border: 0; border-radius: 14px; background: var(--p1); color: var(--ink); cursor: pointer; }
+  .picker .mg button.on { background: var(--red); color: #fff; }
+  .picker .row { display: flex; gap: 8px; margin-top: 14px; }
+  .picker .row button { flex: 1; font: inherit; font-weight: 700; padding: 12px; border: 0; border-radius: 999px; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.15); cursor: pointer; color: var(--ink); }
+  .picker .row button[data-today] { background: var(--red); color: #fff; }
   .seg { display: grid; grid-template-columns: 1fr 1fr; background: #f1ead0; border-radius: 999px; padding: 4px; margin-bottom: 10px; }
   .seg button { font: inherit; font-weight: 700; border: 0; background: transparent; padding: 9px; border-radius: 999px; cursor: pointer; color: var(--soft); }
   .seg button.on { background: var(--red); color: #fff; }
@@ -240,7 +253,7 @@ function buildCover(el) {
     }
   }
   el.innerHTML = `
-    <div class="covhead"><button class="round" data-m="-1">‹</button><h1>${Y}년 ${M + 1}월</h1><button class="round" data-m="1">›</button></div>
+    <div class="covhead"><button class="round" data-m="-1">‹</button><h1 class="pick" data-pick title="년·월 선택">${Y}년 ${M + 1}월 ▾</h1><button class="round" data-m="1">›</button></div>
     <div class="seg"><button data-b="todo" class="${board === 'todo' ? 'on' : ''}">할 일 보드</button><button data-b="diary" class="${board === 'diary' ? 'on' : ''}">일기 보드</button></div>
     <div class="stat">${board === 'todo' ? `완료 <b>${done}</b> / ${tot}` : `이번 달 일기 <b>${written}</b> / ${days()}일`}</div>
     <div class="scroll"><div class="board">${cards}</div></div>
@@ -250,6 +263,7 @@ function buildCover(el) {
       <button class="wall" data-t="exp">⬆ 백업 저장</button>
       <label class="wall">⬇ 백업 불러오기<input type="file" accept="application/json,.json" hidden data-t="imp"></label>
     </div>`;
+  el.querySelector('[data-pick]').onclick = () => openPicker(0);
   el.querySelector('[data-t=wall]').onclick = makeWallpaper;
   el.querySelector('[data-t=cwall]').onclick = makeCalendarWallpaper;
   el.querySelector('[data-t=exp]').onclick = exportData;
@@ -263,6 +277,35 @@ function buildCover(el) {
 }
 
 function replaceWith(el, fresh) { el.replaceWith(fresh); }
+
+/* ---------- 년·월 선택 ---------- */
+function openPicker(page) {
+  const ov = document.createElement('div');
+  ov.className = 'picker';
+  let py = Y;
+  const years = Array.from({ length: 151 }, (_, k) => 1950 + k);
+  const jump = (y, m) => {
+    Y = y; M = m;
+    selDay = (M === now.getMonth() && Y === now.getFullYear()) ? now.getDate() : 1;
+    ov.remove(); show(page);
+  };
+  const render = () => {
+    ov.innerHTML = `<div class="box">
+      <div class="yr"><button data-y="-1" aria-label="이전 해">‹</button>
+        <select aria-label="년도">${years.map(y => `<option value="${y}"${y === py ? ' selected' : ''}>${y}년</option>`).join('')}</select>
+        <button data-y="1" aria-label="다음 해">›</button></div>
+      <div class="mg">${Array.from({ length: 12 }, (_, k) => `<button data-mo="${k}" class="${py === Y && k === M ? 'on' : ''}">${k + 1}월</button>`).join('')}</div>
+      <div class="row"><button data-today>오늘로</button><button data-close>닫기</button></div></div>`;
+    ov.querySelectorAll('[data-y]').forEach(b => b.onclick = () => { py = Math.min(2100, Math.max(1950, py + +b.dataset.y)); render(); });
+    ov.querySelector('select').onchange = e => { py = +e.target.value; render(); };
+    ov.querySelectorAll('[data-mo]').forEach(b => b.onclick = () => jump(py, +b.dataset.mo));
+    ov.querySelector('[data-today]').onclick = () => jump(now.getFullYear(), now.getMonth());
+    ov.querySelector('[data-close]').onclick = () => ov.remove();
+  };
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  render();
+  document.body.appendChild(ov);
+}
 
 /* ---------- 백업: 기기 사이로 기록 옮기기 ---------- */
 function exportData() {
@@ -435,7 +478,7 @@ function buildCal(el) {
   const list = (E[selDay] || []).map((e, k) => ({ e, k })).sort((a, b) => (a.e.time || '99') < (b.e.time || '99') ? -1 : 1);
   el.innerHTML = `
     <div class="tab">CALENDAR</div>
-    <div class="covhead"><button class="round" data-m="-1">‹</button><h1>${Y}년 ${M + 1}월</h1><button class="round" data-m="1">›</button></div>
+    <div class="covhead"><button class="round" data-m="-1">‹</button><h1 class="pick" data-pick title="년·월 선택">${Y}년 ${M + 1}월 ▾</h1><button class="round" data-m="1">›</button></div>
     <div class="calgrid">${cells}</div>
     <div class="scroll">
       <div class="evhead">${M + 1}월 ${selDay}일 (${wdName(selDay)}) 일정</div>
@@ -445,6 +488,7 @@ function buildCal(el) {
     <form class="evf"><input type="time" class="tmi"><input type="text" placeholder="일정 제목" maxlength="60" autocomplete="off"><button class="pill">추가</button></form>`;
   el.querySelectorAll('.ev .t').forEach((s, n) => s.textContent = list[n].e.text);
   const redo = focus => { const fresh = build(1); el.replaceWith(fresh); if (focus) fresh.querySelector('input[type=text]').focus(); };
+  el.querySelector('[data-pick]').onclick = () => openPicker(1);
   el.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { selDay = +b.dataset.d; redo(); });
   el.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
     M += +b.dataset.m; if (M < 0) { M = 11; Y--; } if (M > 11) { M = 0; Y++; }
